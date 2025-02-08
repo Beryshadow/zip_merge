@@ -1,11 +1,13 @@
+use colored::*;
 use rayon::prelude::*;
-use rprompt::prompt_reply;
+use std::cmp;
+use std::env;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 fn read_lines_to_vec(file_path: &str) -> io::Result<Vec<String>> {
     let path = Path::new(file_path);
@@ -30,13 +32,12 @@ fn save_vec_to_file<T: Display>(vec: Vec<T>, file_path: &str) -> io::Result<()> 
     for item in vec {
         writeln!(writer, "{}", item)?; // Writes each item on a new line
     }
-
     Ok(())
 }
 
 fn zip_merge<'a, T>(arr1: &'a [T], arr2: &'a [T]) -> Vec<T>
 where
-    T: PartialEq + Clone, // T needs to implement PartialEq for comparison, and Clone for copying elements
+    T: PartialEq + Clone + Debug, // T needs to implement PartialEq for comparison, and Clone for copying elements
 {
     // Determine the longest and shortest arrays upfront
     let (longest_arr, shortest_arr) = if arr1.len() > arr2.len() {
@@ -99,6 +100,13 @@ where
         combined
     } else {
         // If no common subsequence, concatenate the longest array to the end of the shortest array
+        if shortest_arr.len() > 0 || longest_arr.len() > 0 {
+            println!("{:=<20}", "*");
+            println!("{}", format!("{:?}", shortest_arr).blue());
+            println!("{:-<20}", "|");
+            println!("{}", format!("{:?}", longest_arr).green());
+            println!("{:=<20}", "*");
+        }
         let mut combined = Vec::with_capacity(shortest_arr.len() + longest_arr.len());
         combined.extend_from_slice(shortest_arr); // Add the shortest array
         combined.extend_from_slice(longest_arr); // Add the longest array
@@ -106,39 +114,8 @@ where
         combined // Return the combined array as an owned Vec<T>
     }
 }
-fn main() -> io::Result<()> {
-    // Prompt for 3 file paths
-    // let input_file1 = prompt_reply("Enter the first input file path: ")?;
-    // let input_file2 = prompt_reply("Enter the second input file path: ")?;
-    // let output_file = prompt_reply("Enter the output file path: ")?;
-    let input_file1 = "/home/bery/Downloads/history.txt";
-    let input_file2 = "/home/bery/Downloads/history1.txt";
-    let output_file = "/home/bery/Downloads/history17.txt";
 
-    println!("Input File 1: {}", input_file1);
-    println!("Input File 2: {}", input_file2);
-    println!("Output File: {}", output_file);
-
-    let file1_lines = read_lines_to_vec(&input_file1)?;
-    let file2_lines = read_lines_to_vec(&input_file2)?;
-    let merge_result = deduplicate_patterns(zip_merge(&file1_lines[..], &file2_lines[..]));
-
-    println!(
-        "F1Len: {}, F2Len: {}, MergedLen: {}, SimpleSum: {}",
-        file1_lines.len(),
-        file2_lines.len(),
-        merge_result.len(),
-        file1_lines.len() + file2_lines.len()
-    );
-
-    save_vec_to_file(merge_result, &output_file)?;
-
-    println!("Data has been saved to: {}", output_file);
-
-    Ok(())
-}
-
-fn deduplicate_patterns<T>(arr: Vec<T>) -> Vec<T>
+fn deduplicate_patterns<T>(arr: &Vec<T>, thourougness: usize) -> Vec<T>
 where
     T: PartialEq + Clone + Send + Sync,
 {
@@ -150,6 +127,9 @@ where
     // Parallelize the outer loop over sizes
     for size in 1..=n / 2 {
         // Parallelize the inner loop over starting positions
+        if size * 100 / (n / 2) > 10 && (size * 100 / (n / 2)) % thourougness != 0 {
+            continue;
+        }
         (0..size).into_par_iter().for_each(|start| {
             let mut i = start;
 
@@ -181,9 +161,51 @@ where
                     deduplicated_array.push(item.clone());
                 }
             }
-            return deduplicate_patterns(deduplicated_array);
+            return deduplicate_patterns(&deduplicated_array, thourougness);
         }
-        println!("Currently running {}/{}", size, n / 2);
     }
     return current_array;
+}
+
+fn main() -> io::Result<()> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 4 {
+        eprintln!("Usage: zip_merge <input_file1> <input_file2> <output_file>");
+        return Ok(());
+    }
+
+    // Assign input files and output file from arguments
+    let input_file1 = &args[1];
+    let input_file2 = &args[2];
+    let output_file = &args[3];
+
+    println!("Reading filepaths");
+    let file1_lines = read_lines_to_vec(&input_file1)?;
+    let file2_lines = read_lines_to_vec(&input_file2)?;
+    println!("Reading done");
+    println!("Running Step 1");
+    let dedup1 = deduplicate_patterns(&file1_lines, 20);
+    println!("Running Step 2");
+    let dedup2 = deduplicate_patterns(&file2_lines, 20);
+    println!("Running Step 3");
+    let merge = &zip_merge(&dedup1[..], &dedup2[..]);
+    println!("Running Step 4");
+    let merge_dedup = deduplicate_patterns(merge, 1);
+
+    println!(
+        "File1 Len: {}, File2 Len: {}, Merged Len: {}, Best Case: {}, Worst Case: {}",
+        format!("{}", file1_lines.len()).blue(),
+        format!("{}", file2_lines.len()).blue(),
+        format!("{}", merge_dedup.len()).green(),
+        format!("{}", cmp::max(file1_lines.len(), file2_lines.len())).cyan(),
+        format!("{}", file1_lines.len() + file2_lines.len()).red(),
+    );
+
+    println!("Data has been saved to: {}", output_file);
+    // println!("Input 1: {}", format!("{:?}", file1_lines).red());
+    // println!("Input 2: {}", format!("{:?}", file2_lines).yellow());
+    // println!("Merge R: {}", format!("{:?}", merge_dedup).cyan());
+    save_vec_to_file(merge_dedup, &output_file)?;
+
+    Ok(())
 }
