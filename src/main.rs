@@ -108,9 +108,12 @@ where
 }
 fn main() -> io::Result<()> {
     // Prompt for 3 file paths
-    let input_file1 = prompt_reply("Enter the first input file path: ")?;
-    let input_file2 = prompt_reply("Enter the second input file path: ")?;
-    let output_file = prompt_reply("Enter the output file path: ")?;
+    // let input_file1 = prompt_reply("Enter the first input file path: ")?;
+    // let input_file2 = prompt_reply("Enter the second input file path: ")?;
+    // let output_file = prompt_reply("Enter the output file path: ")?;
+    let input_file1 = "/home/bery/Downloads/history.txt";
+    let input_file2 = "/home/bery/Downloads/history1.txt";
+    let output_file = "/home/bery/Downloads/history17.txt";
 
     println!("Input File 1: {}", input_file1);
     println!("Input File 2: {}", input_file2);
@@ -139,21 +142,20 @@ fn deduplicate_patterns<T>(arr: Vec<T>) -> Vec<T>
 where
     T: PartialEq + Clone + Send + Sync,
 {
-    let current_array = Arc::new(Mutex::new(arr.clone()));
-    let n = current_array.lock().unwrap().len();
-    let indices_to_remove = Arc::new(Mutex::new(Vec::new()));
-    let progress = Arc::new(AtomicUsize::new(0)); // Progress counter
+    let current_array = arr.clone();
+    let n = current_array.len();
+    // Wrap the indices_to_remove in a Mutex for safe mutable access across threads
+    let indices_to_remove = Mutex::new(Vec::new());
 
     // Parallelize the outer loop over sizes
-    (1..=n / 2).into_par_iter().for_each(|size| {
+    for size in 1..=n / 2 {
         // Parallelize the inner loop over starting positions
         (0..size).into_par_iter().for_each(|start| {
             let mut i = start;
-            let total_work = (n / 2) * (n / 2);
 
             // Jump by window size
             while i + size <= n {
-                let current_array = current_array.lock().unwrap();
+                // let current_array = current_array.lock().unwrap();
                 let window = current_array[i..i + size].to_vec();
 
                 // Look for another window starting from a different index
@@ -162,35 +164,26 @@ where
                     let next_window = current_array[j..j + size].to_vec();
                     if window == next_window {
                         // Mark the repeated window's indices for removal
-                        let mut remove_guard = indices_to_remove.lock().unwrap();
+                        let mut indices = indices_to_remove.lock().unwrap();
                         for k in i..i + size {
-                            remove_guard.push(k);
+                            indices.push(k);
                         }
                     }
                 }
-                progress.fetch_add(1, Ordering::SeqCst);
-
                 // Jump the window by its size
                 i += size;
-                if progress.load(Ordering::SeqCst) % (total_work / 200) == 0 {
-                    println!(
-                        "Progress: {}% done",
-                        progress.load(Ordering::SeqCst) * 100 / total_work
-                    );
-                }
             }
         });
-    });
-
-    // Deduplicate the array based on the collected indices
-    let indices_to_remove = indices_to_remove.lock().unwrap();
-    let current_array = current_array.lock().unwrap();
-    let mut deduplicated_array = Vec::new();
-    for (i, item) in current_array.iter().enumerate() {
-        if !indices_to_remove.contains(&(i)) {
-            deduplicated_array.push(item.clone());
+        if !indices_to_remove.lock().unwrap().is_empty() {
+            let mut deduplicated_array = Vec::new();
+            for (i, item) in current_array.iter().enumerate() {
+                if !indices_to_remove.lock().unwrap().contains(&(i)) {
+                    deduplicated_array.push(item.clone());
+                }
+            }
+            return deduplicate_patterns(deduplicated_array);
         }
+        println!("Currently running {}/{}", size, n / 2);
     }
-
-    deduplicated_array
+    return current_array;
 }
