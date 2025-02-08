@@ -108,12 +108,9 @@ where
 }
 fn main() -> io::Result<()> {
     // Prompt for 3 file paths
-    // let input_file1 = prompt_reply("Enter the first input file path: ")?;
-    // let input_file2 = prompt_reply("Enter the second input file path: ")?;
-    // let output_file = prompt_reply("Enter the output file path: ")?;
-    let input_file1 = "/home/bery/Downloads/history.txt";
-    let input_file2 = "/home/bery/Downloads/history1.txt";
-    let output_file = "/home/bery/Downloads/history4.txt";
+    let input_file1 = prompt_reply("Enter the first input file path: ")?;
+    let input_file2 = prompt_reply("Enter the second input file path: ")?;
+    let output_file = prompt_reply("Enter the output file path: ")?;
 
     println!("Input File 1: {}", input_file1);
     println!("Input File 2: {}", input_file2);
@@ -197,14 +194,3 @@ where
 
     deduplicated_array
 }
-// fn main() {
-//     // Test with an integer array
-//     let input_int = vec![
-//         1, 2, 3, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 7, 8, 9, 7, 8, 9, 1, 2, 3, 1, 2, 3,
-//         10, 11, 12, 7, 8, 9, 1, 2, 3, 13, 14, 15, 10, 11, 12, 1, 2, 3, 13, 14, 15, 1, 2, 3, 16, 17,
-//         18, 19, 20, 16, 17, 18, 19, 20,
-//     ];
-
-//     let output_int = deduplicate_patterns(input_int);
-//     println!("Deduplicated (Integers): {:?}", output_int);
-// }
