@@ -35,7 +35,7 @@ fn save_vec_to_file<T: Display>(vec: Vec<T>, file_path: &str) -> io::Result<()> 
     Ok(())
 }
 
-fn zip_merge<'a, T>(arr1: &'a [T], arr2: &'a [T]) -> Vec<T>
+fn zip_merge<'a, T>(arr1: &'a [T], arr2: &'a [T], print_line: bool) -> Vec<T>
 where
     T: PartialEq + Clone + Debug, // T needs to implement PartialEq for comparison, and Clone for copying elements
 {
@@ -90,8 +90,8 @@ where
         let shortest_end = &shortest_arr[max_end2..]; // part after common subsequence in shortest arr
 
         let common = &longest_arr[max_start1..max_end1]; // the common subsequence
-        let mut combined_start = zip_merge(longest_start, shortest_start);
-        let mut combined_end = zip_merge(longest_end, shortest_end);
+        let mut combined_start = zip_merge(longest_start, shortest_start, print_line);
+        let mut combined_end = zip_merge(longest_end, shortest_end, print_line);
         let mut combined =
             Vec::with_capacity(shortest_arr.len() + longest_arr.len() + common.len());
         combined.append(&mut combined_start); // Add the shortest array
@@ -100,7 +100,7 @@ where
         combined
     } else {
         // If no common subsequence, concatenate the longest array to the end of the shortest array
-        if shortest_arr.len() > 0 || longest_arr.len() > 0 {
+        if (shortest_arr.len() > 0 || longest_arr.len() > 0) && print_line {
             println!("{:=<20}", "*");
             println!("{}", format!("{:?}", shortest_arr).blue());
             println!("{:-<20}", "|");
@@ -169,43 +169,74 @@ where
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 4 {
-        eprintln!("Usage: zip_merge <input_file1> <input_file2> <output_file>");
+    // Assign input files and output file from arguments
+    let input_file1;
+    let input_file2;
+    let output_file;
+
+    if args.len() == 4 {
+        input_file1 = &args[1];
+        input_file2 = &args[2];
+        output_file = &args[3];
+    } else if args.len() == 5 {
+        input_file1 = &args[2];
+        input_file2 = &args[3];
+        output_file = &args[4];
+    } else {
+        eprintln!("Usage: zip_merge [-p to pipe] <input_file1> <input_file2> <output_file>");
         return Ok(());
     }
 
-    // Assign input files and output file from arguments
-    let input_file1 = &args[1];
-    let input_file2 = &args[2];
-    let output_file = &args[3];
+    let file1_lines;
+    let file2_lines;
 
-    println!("Reading filepaths");
-    let file1_lines = read_lines_to_vec(&input_file1)?;
-    let file2_lines = read_lines_to_vec(&input_file2)?;
-    println!("Reading done");
-    println!("Running Step 1");
-    let dedup1 = deduplicate_patterns(&file1_lines, 20);
-    println!("Running Step 2");
-    let dedup2 = deduplicate_patterns(&file2_lines, 20);
-    println!("Running Step 3");
-    let merge = &zip_merge(&dedup1[..], &dedup2[..]);
-    println!("Running Step 4");
-    let merge_dedup = deduplicate_patterns(merge, 1);
+    let dedup1;
+    let dedup2;
+    let merge;
+    let merge_dedup;
 
-    println!(
-        "File1 Len: {}, File2 Len: {}, Merged Len: {}, Best Case: {}, Worst Case: {}",
-        format!("{}", file1_lines.len()).blue(),
-        format!("{}", file2_lines.len()).blue(),
-        format!("{}", merge_dedup.len()).green(),
-        format!("{}", cmp::max(file1_lines.len(), file2_lines.len())).cyan(),
-        format!("{}", file1_lines.len() + file2_lines.len()).red(),
-    );
+    if args.len() == 4 {
+        println!("Reading filepaths");
+        file1_lines = read_lines_to_vec(&input_file1)?;
+        file2_lines = read_lines_to_vec(&input_file2)?;
+        println!("Reading done");
+        println!("Running Step 1");
+        dedup1 = deduplicate_patterns(&file1_lines, 20);
+        println!("Running Step 2");
+        dedup2 = deduplicate_patterns(&file2_lines, 20);
+        println!("Running Step 3");
+        merge = zip_merge(&dedup1[..], &dedup2[..], true);
+        println!("Running Step 4");
+        merge_dedup = deduplicate_patterns(&merge, 1);
+    } else {
+        file1_lines = read_lines_to_vec(&input_file1)?;
+        file2_lines = read_lines_to_vec(&input_file2)?;
+        dedup1 = deduplicate_patterns(&file1_lines, 20);
+        dedup2 = deduplicate_patterns(&file2_lines, 20);
+        merge = zip_merge(&dedup1[..], &dedup2[..], false);
+        merge_dedup = deduplicate_patterns(&merge, 1);
+    }
 
-    println!("Data has been saved to: {}", output_file);
-    // println!("Input 1: {}", format!("{:?}", file1_lines).red());
-    // println!("Input 2: {}", format!("{:?}", file2_lines).yellow());
-    // println!("Merge R: {}", format!("{:?}", merge_dedup).cyan());
-    save_vec_to_file(merge_dedup, &output_file)?;
+    if args.len() == 4 {
+        println!(
+            "File1 Len: {}, File2 Len: {}, Merged Len: {}, Best Case: {}, Worst Case: {}",
+            format!("{}", file1_lines.len()).blue(),
+            format!("{}", file2_lines.len()).blue(),
+            format!("{}", merge_dedup.len()).green(),
+            format!("{}", cmp::max(file1_lines.len(), file2_lines.len())).cyan(),
+            format!("{}", file1_lines.len() + file2_lines.len()).red(),
+        );
+
+        println!("Data has been saved to: {}", output_file);
+        // println!("Input 1: {}", format!("{:?}", file1_lines).red());
+        // println!("Input 2: {}", format!("{:?}", file2_lines).yellow());
+        // println!("Merge R: {}", format!("{:?}", merge_dedup).cyan());
+        save_vec_to_file(merge_dedup, &output_file)?;
+    } else {
+        for line in merge_dedup {
+            println!("{line}");
+        }
+    }
 
     Ok(())
 }
